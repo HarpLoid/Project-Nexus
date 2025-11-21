@@ -2,8 +2,8 @@ from django.db import models
 from uuid import uuid4
 
 class Poll(models.Model):
-    SINGLE_CHOICE = 'single'
-    MULTIPLE_CHOICE = 'multiple'
+    SINGLE_CHOICE = 'single choice'
+    MULTIPLE_CHOICE = 'multiple choice'
     POLL_TYPES = [
         (SINGLE_CHOICE, 'Single Choice'),
         (MULTIPLE_CHOICE, 'Multiple Choice'),
@@ -12,7 +12,7 @@ class Poll(models.Model):
     poll_id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
-    poll_type = models.CharField(max_length=10, choices=POLL_TYPES, default=SINGLE_CHOICE)
+    poll_type = models.CharField(max_length=20, choices=POLL_TYPES, default=SINGLE_CHOICE)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     expires_at = models.DateTimeField(null=True, blank=True)
