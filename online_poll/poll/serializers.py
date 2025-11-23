@@ -1,9 +1,9 @@
 from rest_framework import serializers
 from django.utils import timezone
-from django.db import models
-from .utils import generate_anon_id
+from django.contrib.auth import authenticate
 from poll.services.voter_service import create_voter_for_poll
 from .models import CustomUser, Poll, PollOption, Voter, Vote
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 
 # -----------------------
@@ -20,6 +20,32 @@ class RegisterSerializer(serializers.ModelSerializer):
         password = validated_data['password']
         user = CustomUser.objects.create_user(email=email, password=password)
         return user
+
+
+class LoginSerializer(TokenObtainPairSerializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+    
+    def validate(self, attrs):
+        email = attrs.get('email')
+        password = attrs.get('password')
+        
+        user = authenticate(email=email, password=password)
+        
+        if not user:
+            raise serializers.ValidationError("Invalid email or password.")
+        
+        if not user.is_active:
+            raise serializers.ValidationError("Your account is disabled.")
+        
+        data = super().validate(attrs)
+        
+        data['user'] = {
+            'user_id': user.user_id,
+            'email': user.email
+        }
+
+        return data
 
 
 # -----------------------
