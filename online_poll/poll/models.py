@@ -64,7 +64,8 @@ class Poll(models.Model):
     creator = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name='polls'
+        related_name='polls',
+        null=True,
     )
 
     title = models.CharField(max_length=255)
@@ -94,17 +95,12 @@ class PollOption(models.Model):
 # -------------------------
 # Controlled Voters
 # -------------------------
-def generate_temp_password():
-    chars = string.ascii_letters + string.digits
-    return ''.join(random.choice(chars) for _ in range(10))
-
-
 class Voter(models.Model):
     voter_id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
     poll = models.ForeignKey(Poll, related_name='voters', on_delete=models.CASCADE)
     email = models.EmailField()
-    temp_password = models.CharField(max_length=20, default=generate_temp_password)
-    anon_id = models.CharField(max_length=255, default=lambda: str(uuid4()))
+    temp_password = models.CharField(max_length=128)
+    anon_id = models.CharField(max_length=255)
     has_voted = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)

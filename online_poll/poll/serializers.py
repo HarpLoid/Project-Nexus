@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from django.utils import timezone
 from django.db import models
+from .utils import generate_anon_id
+from poll.services.voter_service import create_voter_for_poll
 from .models import CustomUser, Poll, PollOption, Voter, Vote
 
 
@@ -82,10 +84,52 @@ class VoterSerializer(serializers.ModelSerializer):
 
 
 # -----------------------
-# Vote serializer (fixed)
+# Voter upload serializer
+# -----------------------
+class VoterUploadSerializer(serializers.Serializer):
+    voters = serializers.ListField(
+        child=serializers.DictField(),
+        allow_empty=False
+    )
+    
+    def validate(self, data):
+        for obj in data["voters"]:
+            if "email" not in obj:
+                raise serializers.ValidationError("Each voter must have an email field.")
+        return data
+
+    def create(self, validated_data):
+        poll = self.context["poll"]
+        created_list = []
+
+        for obj in validated_data["voters"]:
+            email = obj["email"]
+            voter, was_created, plain_pw = create_voter_for_poll(
+                poll=poll,
+                email=email,
+                send_email=True
+            )
+
+            created_list.append({
+                "email": voter.email,
+                "temp_password": plain_pw,   # only for newly created
+                "anon_id": voter.anon_id,
+                "created": was_created
+            })
+
+        return {"created": created_list}
+
+
+# -----------------------
+# Vote serializer
 # -----------------------
 class VoteSerializer(serializers.ModelSerializer):
-    voter = serializers.PrimaryKeyRelatedField(queryset=Voter.objects.all(), required=False, allow_null=True)
+    poll_option = serializers.PrimaryKeyRelatedField(
+        queryset=PollOption.objects.all()
+    )
+    voter = serializers.PrimaryKeyRelatedField(
+        queryset=Voter.objects.all(), 
+        required=False, allow_null=True)
 
     class Meta:
         model = Vote
@@ -117,12 +161,14 @@ class VoteSerializer(serializers.ModelSerializer):
 
         # single-choice: check anon_id or voter hasn't voted in this poll already
         if poll.poll_type == Poll.SINGLE_CHOICE:
-            already = Vote.objects.filter(poll_option__poll=poll).filter(
-                models.Q(anon_id=anon_id) | models.Q(voter=voter)
-            ).exists()
-            if already:
+            # anon_id double voting
+            if Vote.objects.filter(poll_option__poll=poll, anon_id=anon_id).exists():
                 raise serializers.ValidationError("You can only vote once in this poll.")
 
+            # controlled voter double voting
+            if voter and voter.has_voted:
+                raise serializers.ValidationError("You can only vote once in this poll.")
+        
         # controlled voter cannot have already voted
         if voter and voter.has_voted:
             raise serializers.ValidationError("This voter has already cast their vote.")
@@ -131,8 +177,11 @@ class VoteSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         voter = validated_data.get('voter')
+        vote = super().create(validated_data)
+
         # mark voter as having voted (controlled path)
         if voter:
             voter.has_voted = True
-            voter.save(update_fields=['has_voted'])
-        return super().create(validated_data)
+            voter.save()
+
+        return vote
