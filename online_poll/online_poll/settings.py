@@ -101,7 +101,8 @@ SWAGGER_SETTINGS = {
             "name": "Authorization",
             "in": "header"
         }
-    }
+    },
+    "USE_SESSION_AUTH": False,
 }
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
