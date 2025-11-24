@@ -57,9 +57,9 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -92,6 +92,14 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+}
+
+SWAGGER_SETTINGS = {
+    'SECURITY_DEFINITIONS': {
+        'basic': {
+            'type': 'basic'
+        }
+    }
 }
 
 SIMPLE_JWT = {
@@ -149,9 +157,9 @@ STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'static'
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
+ENV = env.str('ENV', default='development')
 
-if not DEBUG:
-    SWAGGER_BASE_URL = env('SWAGGER_BASE_URL_PROD')
+if ENV == "production":
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
     EMAIL_HOST = env('EMAIL_HOST')
     EMAIL_PORT = env('EMAIL_PORT')
@@ -160,23 +168,9 @@ if not DEBUG:
     EMAIL_HOST_PASSWORD = env("SENDGRID_API_KEY")
     DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL_PROD")
 else:
-    SWAGGER_BASE_URL = env('SWAGGER_BASE_URL_DEV')
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
     DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL_DEV')
     FRONTEND_URL = env('FRONTEND_URL')
-
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-
-SWAGGER_SETTINGS = {
-    'DEFAULT_API_URL': SWAGGER_BASE_URL,
-    'SECURITY_DEFINITIONS': {
-        'Bearer': {
-            'type': 'apiKey',
-            'name': 'Authorization',
-            'in': 'header'
-        }
-    }
-}
 
 
 # Default primary key field type
