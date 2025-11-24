@@ -160,6 +160,16 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 ENV = env.str('ENV', default='development')
 
 if ENV == "production":
+    
+    CORS_ALLOW_ALL_ORIGINS = False
+    CORS_ALLOWED_ORIGINS = [
+        env('BASE_URL_PROD'),
+    ]
+
+    CSRF_TRUSTED_ORIGINS = [
+        env('BASE_URL_PROD'),
+    ]
+    
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
     EMAIL_HOST = env('EMAIL_HOST')
     EMAIL_PORT = env('EMAIL_PORT')
