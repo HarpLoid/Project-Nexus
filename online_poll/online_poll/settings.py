@@ -157,9 +157,20 @@ STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'static'
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
-EMAIL_BACKEND = env('EMAIL_BACKEND')
-DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL')
-FRONTEND_URL = env('FRONTEND_URL')
+ENV = env.str('ENV', default='development')
+
+if ENV == "production":
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = env('EMAIL_HOST')
+    EMAIL_PORT = env('EMAIL_PORT')
+    EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS', default=True)
+    EMAIL_HOST_USER = env('EMAIL_HOST_USER')
+    EMAIL_HOST_PASSWORD = env("SENDGRID_API_KEY")
+    DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL_PROD")
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+    DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL_DEV')
+    FRONTEND_URL = env('FRONTEND_URL')
 
 
 # Default primary key field type
