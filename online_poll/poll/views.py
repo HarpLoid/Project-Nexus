@@ -66,7 +66,7 @@ class PollViewSet(viewsets.ModelViewSet):
         ),
         responses={201: VoteSerializer, 400: 'Validation errors'},
     )
-    @action(detail=True, methods=['post'], url_path='vote')
+    @action(detail=True, methods=['post'], url_path='vote', permission_classes=[AllowAny])
     def vote(self, request, poll_id=None):
         poll = self.get_object()
         option_id = request.data.get('poll_option')

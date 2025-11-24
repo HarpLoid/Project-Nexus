@@ -17,7 +17,6 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework import permissions
-from rest_framework.authentication import BasicAuthentication, SessionAuthentication
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
@@ -30,7 +29,7 @@ schema_view = get_schema_view(
         description="API documentation for the Online Poll application",
     ),
     public=True,
-    authentication_classes=[JWTAuthentication, SessionAuthentication, BasicAuthentication],
+    authentication_classes=[JWTAuthentication],
     permission_classes=(permissions.AllowAny,),
     url=env('BASE_URL_PROD') if env.str('ENV', 'development') == 'production' else env('BASE_URL_DEV'),
 )
