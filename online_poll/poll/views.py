@@ -60,7 +60,6 @@ class PollViewSet(viewsets.ModelViewSet):
             required=['poll_option'],
             properties={
                 'poll_option': openapi.Schema(type=openapi.TYPE_STRING, description='UUID of the poll option to vote for'),
-                'anon_id': openapi.Schema(type=openapi.TYPE_STRING, description='Anonymous voter id (optional)'),
                 'voter_token': openapi.Schema(type=openapi.TYPE_STRING, description='Voter JWT (optional)')
             }
         ),
@@ -70,9 +69,7 @@ class PollViewSet(viewsets.ModelViewSet):
     def vote(self, request, poll_id=None):
         poll = self.get_object()
         option_id = request.data.get('poll_option')
-        anon_id = request.data.get('anon_id')
         voter_token = request.data.get('voter_token')
-        voter_id = request.data.get('voter')
 
         # resolve option
         try:
@@ -80,42 +77,30 @@ class PollViewSet(viewsets.ModelViewSet):
         except PollOption.DoesNotExist:
             return Response({'error': 'Option does not exist for this poll.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        voter = None
-        # if voter_token supplied: decode and load voter
-        if voter_token:
-            try:
+        # if voter_token supplied: get anon_id from it
+        try:
+            if voter_token:
                 token = AccessToken(voter_token)
-                voter = Voter.objects.get(voter_id=token['voter_id'], poll=poll)
-                anon_id = voter.anon_id
-            except Exception:
-                return Response({'error': 'Invalid voter token.'}, status=status.HTTP_400_BAD_REQUEST)
-        elif voter_id:
-            try:
-                voter = Voter.objects.get(voter_id=voter_id, poll=poll)
-                anon_id = voter.anon_id
-            except Voter.DoesNotExist:
-                return Response({'error': 'Voter not found.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        if voter and voter.has_voted:
-            return Response({'error': 'You can only vote once in this poll.'}, status=status.HTTP_400_BAD_REQUEST)
-        else:
-            if Vote.objects.filter(poll_option__poll=poll, anon_id=anon_id).exists():
-                return Response({'error': 'You can only vote once in this poll.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        # build serializer input: pass model instance for poll_option
-        vote_payload = {'poll_option': str(option.option_id),
-                        'anon_id': anon_id,
-                        'voter': str(voter.voter_id) if voter else None}
-
-        serializer = VoteSerializer(data=vote_payload)
+                voter_id = token.get('voter_id')
+                voter = Voter.objects.filter(voter_id=voter_id, poll=poll).first()
+                if not voter:
+                    return Response({'error': 'Voter not registered for this poll.'}, status=status.HTTP_400_BAD_REQUEST)
+                if voter.has_voted:
+                    return Response({'error': 'You have already voted.'}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({'error': f'{e}'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        
+        # Build serializer data (inject anon_id server-side)
+        vote_payload = {
+            'poll_option': option.option_id,
+            'voter': str(voter.voter_id)  # pass voter for serializer create
+        }
+        
+        serializer = VoteSerializer(data=vote_payload, context={'request': request})
         try:
             serializer.is_valid(raise_exception=True)
             vote = serializer.save()
-            
-            if voter:
-                voter.has_voted = True
-                voter.save()
-        
             return Response(VoteSerializer(vote).data, status=status.HTTP_201_CREATED)
         except ValidationError as e:
             return Response({'error': e.detail}, status=status.HTTP_400_BAD_REQUEST)
@@ -151,8 +136,6 @@ class VoterUploadView(generics.CreateAPIView):
                         type=openapi.TYPE_OBJECT,
                         properties={
                             "email": openapi.Schema(type=openapi.TYPE_STRING),
-                            "temp_password": openapi.Schema(type=openapi.TYPE_STRING),
-                            "anon_id": openapi.Schema(type=openapi.TYPE_STRING),
                             "created": openapi.Schema(type=openapi.TYPE_BOOLEAN),
                         }
                     )

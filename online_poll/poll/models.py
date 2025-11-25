@@ -119,10 +119,7 @@ class Voter(models.Model):
 class Vote(models.Model):
     vote_id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
     poll_option = models.ForeignKey(PollOption, related_name='votes', on_delete=models.CASCADE)
-    voter = models.ForeignKey(Voter, related_name='votes', null=True, blank=True,
-                              on_delete=models.CASCADE)
     anon_id = models.CharField(max_length=255)
-
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

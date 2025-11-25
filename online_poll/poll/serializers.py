@@ -87,7 +87,8 @@ class PollCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Poll
-        fields = ['title', 'description', 'poll_type', 'allow_anonymous', 'expires_at', 'options']
+        fields = ['poll_id','title', 'description', 'poll_type', 'allow_anonymous', 'expires_at', 'options']
+        read_only_fields = ['poll_id','created_at', 'updated_at', 'is_active']
 
     def create(self, validated_data):
         options_data = validated_data.pop('options', [])
@@ -138,8 +139,7 @@ class VoterUploadSerializer(serializers.Serializer):
 
             created_list.append({
                 "email": voter.email,
-                "temp_password": plain_pw,   # only for newly created
-                "anon_id": voter.anon_id,
+                "temp_password": plain_pw,
                 "created": was_created
             })
 
@@ -153,23 +153,32 @@ class VoteSerializer(serializers.ModelSerializer):
     poll_option = serializers.PrimaryKeyRelatedField(
         queryset=PollOption.objects.all()
     )
+
     voter = serializers.PrimaryKeyRelatedField(
-        queryset=Voter.objects.all(), 
-        required=False, allow_null=True)
+        queryset=Voter.objects.all(),
+        write_only=True,
+        required=False
+    )
 
     class Meta:
         model = Vote
-        fields = ['vote_id', 'poll_option', 'anon_id', 'voter', 'created_at']
+        fields = ['vote_id', 'poll_option', 'created_at', 'voter']
         read_only_fields = ['vote_id', 'created_at']
 
     def validate(self, data):
-        poll_option = data.get('poll_option')
-        if poll_option is None:
-            raise serializers.ValidationError("poll_option is required.")
+        print("Validating vote data:", data)
+        request = self.context.get('request')
 
+        if not request:
+            raise serializers.ValidationError("Invalid request context.")
+
+        voter = data.get('voter')
+        print("Validating vote for voter:", voter)
+        poll_option = data.get('poll_option')
         poll = poll_option.poll
-        anon_id = data.get('anon_id')
-        voter = data.get('voter')  # may be None
+
+        if not voter:
+            raise serializers.ValidationError("Voter could not be resolved.")
 
         # poll active & not expired
         if not poll.is_active:
@@ -177,37 +186,28 @@ class VoteSerializer(serializers.ModelSerializer):
         if poll.expires_at and poll.expires_at < timezone.now():
             raise serializers.ValidationError("This poll has expired.")
 
-        # require anon_id (for anonymity and uniqueness)
-        if not anon_id:
-            raise serializers.ValidationError("anon_id is required (server can generate one).")
+        # Check uniqueness
+        if voter.has_voted:
+            raise serializers.ValidationError("You have already voted.")
 
-        # duplicate vote for the same option
-        if Vote.objects.filter(poll_option=poll_option, anon_id=anon_id).exists():
-            raise serializers.ValidationError("You have already voted for this option.")
-
-        # single-choice: check anon_id or voter hasn't voted in this poll already
         if poll.poll_type == Poll.SINGLE_CHOICE:
-            # anon_id double voting
-            if Vote.objects.filter(poll_option__poll=poll, anon_id=anon_id).exists():
+            if Vote.objects.filter(
+                poll_option__poll=poll,
+                anon_id=voter.anon_id
+            ).exists():
                 raise serializers.ValidationError("You can only vote once in this poll.")
 
-            # controlled voter double voting
-            if voter and voter.has_voted:
-                raise serializers.ValidationError("You can only vote once in this poll.")
-        
-        # controlled voter cannot have already voted
-        if voter and voter.has_voted:
-            raise serializers.ValidationError("This voter has already cast their vote.")
-
+        # Keep voter so create() can use it
+        data['voter'] = voter
         return data
 
     def create(self, validated_data):
-        voter = validated_data.get('voter')
+        voter = validated_data.pop('voter')
+
+        validated_data['anon_id'] = voter.anon_id
         vote = super().create(validated_data)
 
-        # mark voter as having voted (controlled path)
-        if voter:
-            voter.has_voted = True
-            voter.save()
+        voter.has_voted = True
+        voter.save()
 
         return vote
