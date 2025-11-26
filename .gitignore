@@ -3,3 +3,4 @@ nexus
 __pycache__
 static
 migrations
+email_tst.py
