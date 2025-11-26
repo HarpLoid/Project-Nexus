@@ -27,15 +27,10 @@ def create_voter_for_poll(poll, email, send_email=True):
         }
     )
 
-    # If voter existed but temp_password is empty (rare), set it
-    if not created and (not voter.temp_password):
+    if not created and (not voter.has_voted):
+        voter.anon_id = anon
         voter.temp_password = hashed_pw
-        voter.save(update_fields=["temp_password"])
-    
-    # If voter existed but anon_id is empty or missing, set it
-    if not created and (not voter.anon_id):
-        voter.anon_id = generate_anon_id(email, str(poll.poll_id))
-        voter.save(update_fields=["anon_id"])
+        voter.save(update_fields=["temp_password", "anon_id"])
 
     # send email if requested and newly created (we only email when created)
     if send_email and created:
@@ -46,4 +41,4 @@ def create_voter_for_poll(poll, email, send_email=True):
             poll=poll
         )
 
-    return voter, created, (plain_pw if created else None)
+    return voter, created, plain_pw
