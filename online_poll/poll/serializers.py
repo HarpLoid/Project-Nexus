@@ -166,14 +166,12 @@ class VoteSerializer(serializers.ModelSerializer):
         read_only_fields = ['vote_id', 'created_at']
 
     def validate(self, data):
-        print("Validating vote data:", data)
         request = self.context.get('request')
 
         if not request:
             raise serializers.ValidationError("Invalid request context.")
 
         voter = data.get('voter')
-        print("Validating vote for voter:", voter)
         poll_option = data.get('poll_option')
         poll = poll_option.poll
 
