@@ -178,7 +178,7 @@ if ENV == "production":
     CSRF_TRUSTED_ORIGINS = [
         env('BASE_URL_PROD'),
     ]
-    
+    FRONTEND_URL = env('FRONTEND_URL_PROD')
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
     EMAIL_HOST = env('EMAIL_HOST')
     EMAIL_PORT = env('EMAIL_PORT')
