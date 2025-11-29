@@ -1,30 +1,41 @@
-from django.core.mail import send_mail
 from django.conf import settings
 import hashlib
 import random
 import string
 from uuid import uuid4
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 
 def send_voter_credentials_email(email, temp_password, login_token, poll):
-    subject = f"Voting Access for Poll: {poll.title}"
-
+    """
+    Sends voter credentials using SendGrid Web API.
+    """
     login_link = f"{settings.FRONTEND_URL}/vote?token={login_token}"
 
-    message = (
-        f"You have been invited to vote in '{poll.title}'.\n\n"
-        f"Voter Email: {email}\n"
-        f"Temporary Password: {temp_password}\n"
-        f"Login Link: {login_link}\n\n"
-        f"Use the link to access and cast your vote."
+    content = f"""
+You have been invited to vote in '{poll.title}'.
+
+Voter Email: {email}
+Temporary Password: {temp_password}
+Login Link: {login_link}
+
+Use the link to access and cast your vote.
+"""
+
+    message = Mail(
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to_emails=email,
+        subject=f"Voting Access for Poll: {poll.title}",
+        plain_text_content=content
     )
 
-    send_mail(
-        subject=subject,
-        message=message,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[email],
-        fail_silently=False,
-    )
+    try:
+        sg = SendGridAPIClient(settings.SENDGRID_API_KEY)
+        sg.send(message)
+        print(f"Email successfully sent to {email}")
+    except Exception as e:
+        print(f"Failed to send email to {email}: {e}")
+        raise e
 
 def generate_anon_id(email, poll_id):
     """Generate a consistent anon_id based on email and poll_id"""
