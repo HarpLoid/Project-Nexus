@@ -12,6 +12,7 @@ def send_voter_credentials_email(email, temp_password, login_token, poll):
 
     message = (
         f"You have been invited to vote in '{poll.title}'.\n\n"
+        f"Voter Email: {email}\n"
         f"Temporary Password: {temp_password}\n"
         f"Login Link: {login_link}\n\n"
         f"Use the link to access and cast your vote."

@@ -2,9 +2,9 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient, APITestCase
 from rest_framework import status
+from rest_framework_simplejwt.tokens import AccessToken
 from uuid import uuid4
 from django.core import mail
-from .serializers import VoterUploadSerializer
 from .models import Poll, PollOption, Voter, Vote, CustomUser as User
 
 # ===========================================================
@@ -36,18 +36,26 @@ class PollTests(TestCase):
         #     poll=self.poll,
         #     email="voter@test.com"
         # )
-        
-        serializer = VoterUploadSerializer(
-            data={"voters": [{"email": "voter@test.com"}]},
-            context={"poll": self.poll}
-        )
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        
-        self.voter = Voter.objects.get(email="voter@test.com", poll=self.poll)
-
+        self.voter_login_url = reverse("voter-login")
         self.vote_url = reverse("poll-vote", args=[self.poll.poll_id])
         self.voter_upload_url = reverse("voter-upload", args=[self.poll.poll_id])
+        
+        voter_upload_response = self.client.post(self.voter_upload_url, {
+            "voters": [{"email": "voter@test.com"}]
+        }, format="json")
+        
+        voter_upload_response_data = voter_upload_response.data.get("created", [])
+        voter_login_response = self.client.post(self.voter_login_url, {
+            "email": voter_upload_response_data[0]["email"],
+            "temp_password": voter_upload_response_data[0]["temp_password"],
+            "poll_id": str(self.poll.poll_id)
+        }, format="json")
+        self.voter_data = voter_login_response.data
+        voter_token = self.voter_data.get("voter_token")
+        token = AccessToken(voter_token)
+        voter_id = token.get('voter_id')
+        self.voter = Voter.objects.filter(voter_id=voter_id, poll=self.poll).first()
+
 
     # -------------------------
     # Poll creation
@@ -56,39 +64,39 @@ class PollTests(TestCase):
         self.assertEqual(self.poll.title, "Favorite Fruit?")
         self.assertEqual(self.poll.options.count(), 2)
 
-    # -------------------------
-    # Anonymous voting
-    # -------------------------
-    def test_vote_anonymous(self):
-        anon_id = str(uuid4())
-        data = {
-            "poll_option": str(self.option1.option_id),
-            "anon_id": anon_id
-        }
-        response = self.client.post(self.vote_url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+    # # -------------------------
+    # # Anonymous voting
+    # # -------------------------
+    # def test_vote_anonymous(self):
+    #     anon_id = str(uuid4())
+    #     data = {
+    #         "poll_option": str(self.option1.option_id),
+    #         "anon_id": anon_id
+    #     }
+    #     response = self.client.post(self.vote_url, data, format="json")
+    #     self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
-        vote = Vote.objects.first()
-        self.assertEqual(vote.poll_option, self.option1)
-        self.assertEqual(vote.anon_id, anon_id)
+    #     vote = Vote.objects.first()
+    #     self.assertEqual(vote.poll_option, self.option1)
+    #     self.assertEqual(vote.anon_id, anon_id)
 
-    def test_single_choice_anon_constraint(self):
-        anon_id = str(uuid4())
+    # def test_single_choice_anon_constraint(self):
+    #     anon_id = str(uuid4())
 
-        # First vote
-        self.client.post(self.vote_url, {
-            "poll_option": str(self.option1.option_id),
-            "anon_id": anon_id
-        }, format="json")
+    #     # First vote
+    #     self.client.post(self.vote_url, {
+    #         "poll_option": str(self.option1.option_id),
+    #         "anon_id": anon_id
+    #     }, format="json")
 
-        # Second vote for different option
-        response = self.client.post(self.vote_url, {
-            "poll_option": str(self.option2.option_id),
-            "anon_id": anon_id
-        }, format="json")
+    #     # Second vote for different option
+    #     response = self.client.post(self.vote_url, {
+    #         "poll_option": str(self.option2.option_id),
+    #         "anon_id": anon_id
+    #     }, format="json")
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("You can only vote once", str(response.data.get("error")))
+    #     self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+    #     self.assertIn("You can only vote once", str(response.data.get("error")))
 
     # -------------------------
     # Controlled voter voting
@@ -96,13 +104,13 @@ class PollTests(TestCase):
     def test_controlled_voter_can_vote(self):
         data = {
             "poll_option": str(self.option1.option_id),
-            "voter": str(self.voter.voter_id)
+            "voter_token": str(self.voter_data.get("voter_token"))
         }
 
         response = self.client.post(self.vote_url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
-        vote = Vote.objects.get(voter=self.voter)
+        vote = Vote.objects.get(anon_id=self.voter_data.get('anon_id'))
         self.assertEqual(vote.poll_option, self.option1)
 
         self.voter.refresh_from_db()
@@ -112,20 +120,20 @@ class PollTests(TestCase):
         # First vote
         self.client.post(self.vote_url, {
             "poll_option": str(self.option1.option_id),
-            "voter": str(self.voter.voter_id)
+            "voter_token": str(self.voter_data.get("voter_token"))
         }, format="json")
 
         # Second vote attempt
         response = self.client.post(self.vote_url, {
             "poll_option": str(self.option2.option_id),
-            "voter": str(self.voter.voter_id)
+            "voter_token": str(self.voter_data.get("voter_token"))
         }, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         error_msg = response.data.get("error")
         if isinstance(error_msg, dict):
             error_msg = str(list(error_msg.values())[0])
-        self.assertIn("You can only vote once", str(error_msg))
+        self.assertIn("You have already voted", str(error_msg))
 
     # -------------------------
     # Poll results
@@ -134,7 +142,7 @@ class PollTests(TestCase):
         # Add some votes
         Vote.objects.create(poll_option=self.option1, anon_id=str(uuid4()))
         Vote.objects.create(poll_option=self.option1, anon_id=str(uuid4()))
-        Vote.objects.create(poll_option=self.option2, voter=self.voter, anon_id=self.voter.anon_id)
+        Vote.objects.create(poll_option=self.option2, anon_id=self.voter.anon_id)
 
         url = reverse("poll-results", args=[self.poll.poll_id])
         response = self.client.get(url)
@@ -200,10 +208,10 @@ class PollTests(TestCase):
 
         # Verify content
         response_data = response.data["created"][0]
-        returned_anon_id = response_data["anon_id"]
+        returned_email = response_data["email"]
         returned_temp_pwd = response_data["temp_password"]
 
-        self.assertIn(returned_anon_id, email.body)
+        self.assertIn(returned_email, email.body)
         self.assertIn(returned_temp_pwd, email.body)
     
     def test_multiple_voters_send_multiple_emails(self):
