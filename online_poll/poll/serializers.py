@@ -150,33 +150,32 @@ class VoterUploadSerializer(serializers.Serializer):
 # Vote serializer
 # -----------------------
 class VoteSerializer(serializers.ModelSerializer):
-    poll_option = serializers.PrimaryKeyRelatedField(
-        queryset=PollOption.objects.all()
-    )
-
+    poll_option = serializers.PrimaryKeyRelatedField(queryset=PollOption.objects.all())
+    
     voter = serializers.PrimaryKeyRelatedField(
         queryset=Voter.objects.all(),
         write_only=True,
         required=False
     )
+    anon_id = serializers.CharField(write_only=True, required=False)
 
     class Meta:
         model = Vote
-        fields = ['vote_id', 'poll_option', 'created_at', 'voter']
+        fields = ['vote_id', 'poll_option', 'created_at', 'voter', 'anon_id']
         read_only_fields = ['vote_id', 'created_at']
 
     def validate(self, data):
         request = self.context.get('request')
-
         if not request:
             raise serializers.ValidationError("Invalid request context.")
 
-        voter = data.get('voter')
+        voter = data.get('voter', None)
+        anon_id = data.get('anon_id', None)
         poll_option = data.get('poll_option')
         poll = poll_option.poll
 
-        if not voter:
-            raise serializers.ValidationError("Voter could not be resolved.")
+        if not voter and not anon_id:
+            raise serializers.ValidationError("Either voter or anon_id must be provided.")
 
         # poll active & not expired
         if not poll.is_active:
@@ -184,28 +183,34 @@ class VoteSerializer(serializers.ModelSerializer):
         if poll.expires_at and poll.expires_at < timezone.now():
             raise serializers.ValidationError("This poll has expired.")
 
-        # Check uniqueness
-        if voter.has_voted:
-            raise serializers.ValidationError("You have already voted.")
-
+        # Single choice uniqueness checks
         if poll.poll_type == Poll.SINGLE_CHOICE:
-            if Vote.objects.filter(
+            vote_exists = Vote.objects.filter(
                 poll_option__poll=poll,
-                anon_id=voter.anon_id
-            ).exists():
+                anon_id=anon_id if anon_id else voter.anon_id
+            ).exists()
+            if vote_exists:
                 raise serializers.ValidationError("You can only vote once in this poll.")
 
-        # Keep voter so create() can use it
+        # Mark voter in data for create
         data['voter'] = voter
         return data
 
     def create(self, validated_data):
-        voter = validated_data.pop('voter')
+        voter = validated_data.pop('voter', None)
+        anon_id = validated_data.pop('anon_id', None)
 
-        validated_data['anon_id'] = voter.anon_id
-        vote = super().create(validated_data)
-
-        voter.has_voted = True
-        voter.save()
+        if voter:
+            validated_data['anon_id'] = voter.anon_id
+            vote = super().create(validated_data)
+            voter.has_voted = True
+            voter.save()
+        else:
+            validated_data['anon_id'] = anon_id
+            vote = super().create(validated_data)
 
         return vote
+
+class AnonymousVoteSerializer(serializers.Serializer):
+    anon_id = serializers.CharField(read_only=True)
+

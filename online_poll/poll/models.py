@@ -1,5 +1,3 @@
-import string
-import random
 from uuid import uuid4
 from django.db import models
 from django.conf import settings
@@ -129,3 +127,12 @@ class Vote(models.Model):
                 name='unique_vote_per_option_per_anon'
             )
         ]
+
+class AnonymousVoter(models.Model):
+    anon_id = models.CharField(max_length=64, unique=True, default=uuid4().hex)
+    poll = models.ForeignKey('Poll', on_delete=models.CASCADE, related_name='anonymous_voters')
+    has_voted = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Anon {self.anon_id} for Poll {self.poll.poll_id}"

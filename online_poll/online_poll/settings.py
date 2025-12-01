@@ -182,6 +182,7 @@ if ENV == "production":
     SENDGRID_API_KEY = env("SENDGRID_API_KEY")
     DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL_PROD")
 else:
+    CORS_ALLOW_ALL_ORIGINS = True
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
     DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL_DEV')
     FRONTEND_URL = env('FRONTEND_URL')

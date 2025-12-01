@@ -5,35 +5,40 @@ from poll.utils import generate_temp_password, generate_anon_id, send_voter_cred
 def create_voter_for_poll(poll, email, send_email=True):
     """
     Create or get a Voter for `poll` and `email`.
-    Returns (voter, created, plain_temp_password_or_None)
-    - If created True -> returns the plaintext temp password (so controller can email or include in response)
-    - If already exists -> returns None for plain password
+    
+    Returns:
+        voter: Voter instance
+        created: True if newly created, False if already existed
+        plain_pw: The plain temporary password if created or regenerated
     """
-    # generate temp password plaintext
+    # Generate a new temporary password
     plain_pw = generate_temp_password()
 
-    # generate anon_id
+    # Generate a new anon_id
     anon = generate_anon_id(email, str(poll.poll_id))
 
-    # hash before saving
+    # Hash the password before storing
     hashed_pw = make_password(plain_pw)
 
+    # Try to get existing voter
     voter, created = Voter.objects.get_or_create(
         poll=poll,
         email=email,
         defaults={
             "anon_id": anon,
-            "temp_password": hashed_pw,  # store hashed
+            "temp_password": hashed_pw,
         }
     )
 
-    if not created and (not voter.has_voted):
-        voter.anon_id = anon
+    # If voter exists and has not voted, allow password regeneration
+    if not created and not voter.has_voted:
         voter.temp_password = hashed_pw
+        voter.anon_id = anon  # optionally regenerate anon_id for extra security
         voter.save(update_fields=["temp_password", "anon_id"])
+        created = False  # still not "newly created", but password regenerated
 
-    # send email if requested and newly created (we only email when created)
-    if send_email and created:
+    # Send credentials via email if requested
+    if send_email:
         send_voter_credentials_email(
             email=email,
             temp_password=plain_pw,
